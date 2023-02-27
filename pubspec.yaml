@@ -1,0 +1,21 @@
+name: xdg_status_notifier_item
+version: 0.0.1
+
+description:
+  Allows status notifications (i.e. system tray) on Linux desktops.
+
+homepage: https://github.com/canonical/xdg_status_notifier_item.dart
+
+environment:
+  sdk: '>=2.12.0 <3.0.0'
+
+platforms:
+  linux:
+
+dependencies:
+  dbus: ^0.7.8
+
+dev_dependencies:
+  lints: ^2.0.0
+  test: ^1.16.8
+  test_cov: ^1.0.1
