@@ -13,6 +13,29 @@ enum StatusNotifierItemCategory {
 /// Status for notifier items.
 enum StatusNotifierItemStatus { passive, active }
 
+enum DBusMenuItemToggleType { checkmark, radio }
+
+class DBusMenuItem {
+  final int id;
+  String? type;
+  bool? enabled;
+  bool? visible;
+  String? label;
+  int? toggleState;
+  DBusMenuItemToggleType? toggleType;
+  String? childrenDisplay;
+  var children = <DBusMenuItem>[];
+
+  DBusMenuItem(this.id,
+      {this.type,
+      this.enabled,
+      this.visible,
+      this.label,
+      this.toggleState,
+      this.toggleType,
+      this.childrenDisplay});
+}
+
 String _encodeCategory(StatusNotifierItemCategory value) =>
     {
       StatusNotifierItemCategory.applicationStatus: 'ApplicationStatus',
@@ -30,7 +53,12 @@ String _encodeStatus(StatusNotifierItemStatus value) =>
     '';
 
 class _MenuObject extends DBusObject {
-  _MenuObject() : super(DBusObjectPath('/Menu'));
+  DBusMenuItem menu;
+  bool Function(int id)? aboutToShow;
+  bool Function(int id, String eventId, DBusValue data, int timestamp)? event;
+
+  _MenuObject(this.menu, {this.aboutToShow, this.event})
+      : super(DBusObjectPath('/Menu'));
 
   List<DBusIntrospectInterface> introspect() {
     return [
@@ -113,16 +141,25 @@ class _MenuObject extends DBusObject {
         if (methodCall.signature != DBusSignature('i')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
-        return DBusMethodSuccessResponse([DBusBoolean(false)]);
+        var id = methodCall.values[0].asInt32();
+        var needsUpdate = await aboutToShow?.call(id) ?? false;
+        return DBusMethodSuccessResponse([DBusBoolean(needsUpdate)]);
       case 'AboutToShowGroup':
         if (methodCall.signature != DBusSignature('ai')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
-        return DBusMethodSuccessResponse([DBusArray.int32([])]);
+        var ids = methodCall.values[0].asInt32Array();
+        return DBusMethodSuccessResponse(
+            [DBusArray.int32([]), DBusArray.int32([])]);
       case 'Event':
         if (methodCall.signature != DBusSignature('isvu')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
+        var id = methodCall.values[0].asInt32();
+        var eventId = methodCall.values[1].asString();
+        var data = methodCall.values[2].asVariant();
+        var timestamp = methodCall.values[3].asUint32();
+        await event?.call(id, eventId, data, timestamp);
         return DBusMethodSuccessResponse();
       case 'EventGroup':
         if (methodCall.signature != DBusSignature('a(isvu)')) {
@@ -133,11 +170,12 @@ class _MenuObject extends DBusObject {
         if (methodCall.signature != DBusSignature('iias')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
-        return DBusMethodSuccessResponse([
-          DBusUint32(0),
-          DBusStruct(
-              [DBusInt32(0), DBusDict.stringVariant({}), DBusArray.variant([])])
-        ]);
+        var parentId = methodCall.values[0].asInt32();
+        var recursionDepth = methodCall.values[1].asInt32();
+        var propertyNames = methodCall.values[2].asStringArray();
+        var revision = 1;
+        return DBusMethodSuccessResponse(
+            [DBusUint32(revision), _makeMenuItem(menu)]);
       case 'GetProperty':
         if (methodCall.signature != DBusSignature('is')) {
           return DBusMethodErrorResponse.invalidArgs();
@@ -146,6 +184,40 @@ class _MenuObject extends DBusObject {
       default:
         return DBusMethodErrorResponse.unknownMethod();
     }
+  }
+
+  DBusValue _makeMenuItem(DBusMenuItem item) {
+    var properties = <String, DBusValue>{};
+    if (item.type != null) {
+      properties['type'] = DBusString(item.type!);
+    }
+    if (item.enabled != null) {
+      properties['enabled'] = DBusBoolean(item.enabled!);
+    }
+    if (item.visible != null) {
+      properties['visible'] = DBusBoolean(item.visible!);
+    }
+    if (item.label != null) {
+      properties['label'] = DBusString(item.label!);
+    }
+    if (item.toggleType != null) {
+      properties['toggle-type'] = DBusString({
+            DBusMenuItemToggleType.checkmark: 'checkmark',
+            DBusMenuItemToggleType.radio: 'radio'
+          }[item.toggleType!] ??
+          '');
+    }
+    if (item.toggleState != null) {
+      properties['toggle-state'] = DBusInt32(item.toggleState!);
+    }
+    if (item.childrenDisplay != null) {
+      properties['children-display'] = DBusString(item.childrenDisplay!);
+    }
+    return DBusStruct([
+      DBusInt32(item.id),
+      DBusDict.stringVariant(properties),
+      DBusArray.variant(item.children.map(_makeMenuItem))
+    ]);
   }
 
   @override
@@ -174,6 +246,10 @@ class _StatusNotifierItemObject extends DBusObject {
   String attentionMovieName;
   final bool itemIsMenu;
   final DBusObjectPath menu;
+  Future<void> Function(int x, int y)? contextMenu;
+  Future<void> Function(int x, int y)? activate;
+  Future<void> Function(int x, int y)? secondaryActivate;
+  Future<void> Function(int delta, String orientation)? scroll;
 
   _StatusNotifierItemObject(
       {this.category = StatusNotifierItemCategory.applicationStatus,
@@ -186,7 +262,11 @@ class _StatusNotifierItemObject extends DBusObject {
       this.attentionIconName = '',
       this.attentionMovieName = '',
       this.itemIsMenu = false,
-      this.menu = DBusObjectPath.root})
+      this.menu = DBusObjectPath.root,
+      this.contextMenu,
+      this.activate,
+      this.secondaryActivate,
+      this.scroll})
       : super(DBusObjectPath('/StatusNotifierItem'));
 
   List<DBusIntrospectInterface> introspect() {
@@ -266,21 +346,33 @@ class _StatusNotifierItemObject extends DBusObject {
         if (methodCall.signature != DBusSignature('ii')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
+        var x = methodCall.values[0].asInt32();
+        var y = methodCall.values[0].asInt32();
+        await contextMenu?.call(x, y);
         return DBusMethodSuccessResponse();
       case 'Activate':
         if (methodCall.signature != DBusSignature('ii')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
+        var x = methodCall.values[0].asInt32();
+        var y = methodCall.values[0].asInt32();
+        await activate?.call(x, y);
         return DBusMethodSuccessResponse();
       case 'SecondaryActivate':
         if (methodCall.signature != DBusSignature('ii')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
+        var x = methodCall.values[0].asInt32();
+        var y = methodCall.values[0].asInt32();
+        await secondaryActivate?.call(x, y);
         return DBusMethodSuccessResponse();
       case 'Scroll':
         if (methodCall.signature != DBusSignature('is')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
+        var delta = methodCall.values[0].asInt32();
+        var orientation = methodCall.values[0].asString();
+        await scroll?.call(delta, orientation);
         return DBusMethodSuccessResponse();
       case 'ProvideXdgActivationToken':
         if (methodCall.signature != DBusSignature('s')) {
@@ -387,8 +479,16 @@ class StatusNotifierItemClient {
     assert(requestResult == DBusRequestNameReply.primaryOwner);
 
     // Create a menu.
-    var menu = _MenuObject();
-    await _bus.registerObject(menu);
+    var menu = DBusMenuItem(0, childrenDisplay: 'submenu');
+    menu.children
+        .add(DBusMenuItem(1, enabled: false, label: 'Start', visible: true));
+    menu.children.add(
+        DBusMenuItem(2, enabled: true, label: 'Open Shell', visible: true));
+    menu.children
+        .add(DBusMenuItem(3, enabled: false, label: 'Stop', visible: true));
+    menu.children.add(DBusMenuItem(4, type: 'separator', visible: true));
+    var menuObject = _MenuObject(menu);
+    await _bus.registerObject(menuObject);
 
     // Put the item on the bus.
     var item = _StatusNotifierItemObject(
@@ -401,7 +501,7 @@ class StatusNotifierItemClient {
         overlayIconName: overlayIconName,
         attentionIconName: attentionIconName,
         attentionMovieName: attentionMovieName,
-        menu: menu.path);
+        menu: menuObject.path);
     await _bus.registerObject(item);
 
     // Register the item.
