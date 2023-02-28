@@ -16,7 +16,6 @@ enum StatusNotifierItemStatus { passive, active }
 enum DBusMenuItemToggleType { checkmark, radio }
 
 class DBusMenuItem {
-  final int id;
   String? type;
   bool? enabled;
   bool? visible;
@@ -25,15 +24,23 @@ class DBusMenuItem {
   DBusMenuItemToggleType? toggleType;
   String? childrenDisplay;
   var children = <DBusMenuItem>[];
+  bool Function(int id)? aboutToShow;
+  Future<void> Function()? opened;
+  Future<void> Function()? closed;
+  Future<void> Function()? clicked;
 
-  DBusMenuItem(this.id,
+  DBusMenuItem(
       {this.type,
       this.enabled,
       this.visible,
       this.label,
       this.toggleState,
       this.toggleType,
-      this.childrenDisplay});
+      this.childrenDisplay,
+      this.aboutToShow,
+      this.opened,
+      this.closed,
+      this.clicked});
 }
 
 String _encodeCategory(StatusNotifierItemCategory value) =>
@@ -54,11 +61,12 @@ String _encodeStatus(StatusNotifierItemStatus value) =>
 
 class _MenuObject extends DBusObject {
   DBusMenuItem menu;
-  bool Function(int id)? aboutToShow;
-  bool Function(int id, String eventId, DBusValue data, int timestamp)? event;
+  var _items = <DBusMenuItem>[];
+  var _idsByItem = <DBusMenuItem, int>{};
 
-  _MenuObject(this.menu, {this.aboutToShow, this.event})
-      : super(DBusObjectPath('/Menu'));
+  _MenuObject(this.menu) : super(DBusObjectPath('/Menu')) {
+    _registerId(menu);
+  }
 
   List<DBusIntrospectInterface> introspect() {
     return [
@@ -142,8 +150,13 @@ class _MenuObject extends DBusObject {
           return DBusMethodErrorResponse.invalidArgs();
         }
         var id = methodCall.values[0].asInt32();
-        var needsUpdate = await aboutToShow?.call(id) ?? false;
-        return DBusMethodSuccessResponse([DBusBoolean(needsUpdate)]);
+        var item = _getItem(id);
+        if (item != null) {
+          var needsUpdate = await item.aboutToShow?.call(id) ?? false;
+          return DBusMethodSuccessResponse([DBusBoolean(needsUpdate)]);
+        } else {
+          return DBusMethodErrorResponse('com.canonical.dbusmenu.UnknownId');
+        }
       case 'AboutToShowGroup':
         if (methodCall.signature != DBusSignature('ai')) {
           return DBusMethodErrorResponse.invalidArgs();
@@ -157,9 +170,22 @@ class _MenuObject extends DBusObject {
         }
         var id = methodCall.values[0].asInt32();
         var eventId = methodCall.values[1].asString();
-        var data = methodCall.values[2].asVariant();
-        var timestamp = methodCall.values[3].asUint32();
-        await event?.call(id, eventId, data, timestamp);
+        //var data = methodCall.values[2].asVariant();
+        //var timestamp = methodCall.values[3].asUint32();
+        var item = _getItem(id);
+        if (item != null) {
+          switch (eventId) {
+            case 'opened':
+              await item.opened?.call();
+              break;
+            case 'closed':
+              await item.closed?.call();
+              break;
+            case 'clicked':
+              await item.clicked?.call();
+              break;
+          }
+        }
         return DBusMethodSuccessResponse();
       case 'EventGroup':
         if (methodCall.signature != DBusSignature('a(isvu)')) {
@@ -184,6 +210,13 @@ class _MenuObject extends DBusObject {
       default:
         return DBusMethodErrorResponse.unknownMethod();
     }
+  }
+
+  void _registerId(DBusMenuItem item) {
+    var id = _items.length;
+    _items.add(item);
+    _idsByItem[item] = id;
+    item.children.forEach(_registerId);
   }
 
   DBusValue _makeMenuItem(DBusMenuItem item) {
@@ -214,10 +247,14 @@ class _MenuObject extends DBusObject {
       properties['children-display'] = DBusString(item.childrenDisplay!);
     }
     return DBusStruct([
-      DBusInt32(item.id),
+      DBusInt32(_idsByItem[item] ?? -1),
       DBusDict.stringVariant(properties),
       DBusArray.variant(item.children.map(_makeMenuItem))
     ]);
+  }
+
+  DBusMenuItem? _getItem(int id) {
+    return id >= 0 && id <= _items.length ? _items[id] : null;
   }
 
   @override
@@ -479,14 +516,14 @@ class StatusNotifierItemClient {
     assert(requestResult == DBusRequestNameReply.primaryOwner);
 
     // Create a menu.
-    var menu = DBusMenuItem(0, childrenDisplay: 'submenu');
+    var menu = DBusMenuItem(childrenDisplay: 'submenu');
     menu.children
-        .add(DBusMenuItem(1, enabled: false, label: 'Start', visible: true));
-    menu.children.add(
-        DBusMenuItem(2, enabled: true, label: 'Open Shell', visible: true));
+        .add(DBusMenuItem(enabled: false, label: 'Start', visible: true));
     menu.children
-        .add(DBusMenuItem(3, enabled: false, label: 'Stop', visible: true));
-    menu.children.add(DBusMenuItem(4, type: 'separator', visible: true));
+        .add(DBusMenuItem(enabled: true, label: 'Open Shell', visible: true));
+    menu.children
+        .add(DBusMenuItem(enabled: false, label: 'Stop', visible: true));
+    menu.children.add(DBusMenuItem(type: 'separator', visible: true));
     var menuObject = _MenuObject(menu);
     await _bus.registerObject(menuObject);
 
