@@ -13,17 +13,14 @@ enum StatusNotifierItemCategory {
 /// Status for notifier items.
 enum StatusNotifierItemStatus { passive, active }
 
-enum DBusMenuItemToggleType { checkmark, radio }
-
 class DBusMenuItem {
-  String? type;
-  bool? enabled;
-  bool? visible;
-  String? label;
-  int? toggleState;
-  DBusMenuItemToggleType? toggleType;
-  String? childrenDisplay;
-  var children = <DBusMenuItem>[];
+  final String? type;
+  final bool? enabled;
+  final bool? visible;
+  final String? label;
+  final int? toggleState;
+  final String? toggleType;
+  final List<DBusMenuItem> children;
   bool Function(int id)? aboutToShow;
   Future<void> Function()? opened;
   Future<void> Function()? closed;
@@ -36,11 +33,40 @@ class DBusMenuItem {
       this.label,
       this.toggleState,
       this.toggleType,
-      this.childrenDisplay,
+      this.children = const [],
       this.aboutToShow,
       this.opened,
       this.closed,
       this.clicked});
+
+  DBusMenuItem.separator({bool visible = true})
+      : this(type: 'separator', visible: visible);
+
+  DBusMenuItem.checkmark(String label,
+      {bool visible = true,
+      bool enabled = true,
+      bool state = false,
+      Future<void> Function()? clicked})
+      : this(
+            visible: visible,
+            enabled: enabled,
+            label: label,
+            toggleType: 'checkmark',
+            toggleState: state ? 1 : 0,
+            clicked: clicked);
+
+  DBusMenuItem.radio(String label,
+      {bool visible = true,
+      bool enabled = true,
+      bool state = false,
+      Future<void> Function()? clicked})
+      : this(
+            visible: visible,
+            enabled: enabled,
+            label: label,
+            toggleType: 'radio',
+            toggleState: state ? 1 : 0,
+            clicked: clicked);
 }
 
 String _encodeCategory(StatusNotifierItemCategory value) =>
@@ -138,8 +164,6 @@ class _MenuObject extends DBusObject {
 
   @override
   Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
-    print(methodCall);
-
     if (methodCall.interface != 'com.canonical.dbusmenu') {
       return DBusMethodErrorResponse.unknownInterface();
     }
@@ -234,17 +258,13 @@ class _MenuObject extends DBusObject {
       properties['label'] = DBusString(item.label!);
     }
     if (item.toggleType != null) {
-      properties['toggle-type'] = DBusString({
-            DBusMenuItemToggleType.checkmark: 'checkmark',
-            DBusMenuItemToggleType.radio: 'radio'
-          }[item.toggleType!] ??
-          '');
+      properties['toggle-type'] = DBusString(item.toggleType!);
     }
     if (item.toggleState != null) {
       properties['toggle-state'] = DBusInt32(item.toggleState!);
     }
-    if (item.childrenDisplay != null) {
-      properties['children-display'] = DBusString(item.childrenDisplay!);
+    if (item.children.isNotEmpty) {
+      properties['children-display'] = DBusString('submenu');
     }
     return DBusStruct([
       DBusInt32(_idsByItem[item] ?? -1),
@@ -255,19 +275,6 @@ class _MenuObject extends DBusObject {
 
   DBusMenuItem? _getItem(int id) {
     return id >= 0 && id <= _items.length ? _items[id] : null;
-  }
-
-  @override
-  Future<DBusMethodResponse> getProperty(String interface, String name) async {
-    if (interface != 'com.canonical.dbusmenu') {
-      return DBusMethodErrorResponse.unknownProperty();
-    }
-
-    switch (name) {
-      default:
-        print('get property $interface $name');
-        return DBusMethodErrorResponse.unknownProperty();
-    }
   }
 }
 
@@ -417,7 +424,6 @@ class _StatusNotifierItemObject extends DBusObject {
         }
         return DBusMethodSuccessResponse();
       default:
-        print(methodCall);
         return DBusMethodErrorResponse.unknownMethod();
     }
   }
@@ -465,7 +471,6 @@ class _StatusNotifierItemObject extends DBusObject {
       case 'Menu':
         return DBusGetPropertyResponse(menu);
       default:
-        print('get property $interface $name');
         return DBusMethodErrorResponse.unknownProperty();
     }
   }
@@ -516,14 +521,21 @@ class StatusNotifierItemClient {
     assert(requestResult == DBusRequestNameReply.primaryOwner);
 
     // Create a menu.
-    var menu = DBusMenuItem(childrenDisplay: 'submenu');
-    menu.children
-        .add(DBusMenuItem(enabled: false, label: 'Start', visible: true));
-    menu.children
-        .add(DBusMenuItem(enabled: true, label: 'Open Shell', visible: true));
-    menu.children
-        .add(DBusMenuItem(enabled: false, label: 'Stop', visible: true));
-    menu.children.add(DBusMenuItem(type: 'separator', visible: true));
+    var menu = DBusMenuItem(children: [
+      DBusMenuItem(label: 'Start', enabled: false),
+      DBusMenuItem(label: 'Open Shell'),
+      DBusMenuItem(label: 'Stop', enabled: false),
+      DBusMenuItem.separator(),
+      DBusMenuItem(label: 'snapcraft-ubuntu-desktop-session', children: [
+        DBusMenuItem(label: 'Start'),
+        DBusMenuItem(label: 'Open Shell'),
+        DBusMenuItem(label: 'Stop', enabled: false)
+      ]),
+      DBusMenuItem(label: 'About', children: [
+        DBusMenuItem.checkmark('Autostart on login', state: true)
+      ]),
+      DBusMenuItem(label: 'Quit')
+    ]);
     var menuObject = _MenuObject(menu);
     await _bus.registerObject(menuObject);
 
