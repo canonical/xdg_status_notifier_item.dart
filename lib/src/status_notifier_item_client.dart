@@ -66,6 +66,19 @@ class _MenuObject extends DBusObject {
           DBusIntrospectArgument(DBusSignature('ai'), DBusArgumentDirection.out,
               name: 'idErrors')
         ]),
+        DBusIntrospectMethod('GetLayout', args: [
+          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
+              name: 'parentId'),
+          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
+              name: 'recursionDepth'),
+          DBusIntrospectArgument(DBusSignature('as'), DBusArgumentDirection.in_,
+              name: 'propertyNames'),
+          DBusIntrospectArgument(DBusSignature('u'), DBusArgumentDirection.out,
+              name: 'revision'),
+          DBusIntrospectArgument(
+              DBusSignature('(ia{sv}av)'), DBusArgumentDirection.out,
+              name: 'layout')
+        ]),
         DBusIntrospectMethod('GetProperty', args: [
           DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
               name: 'id'),
@@ -101,31 +114,35 @@ class _MenuObject extends DBusObject {
           return DBusMethodErrorResponse.invalidArgs();
         }
         return DBusMethodSuccessResponse([DBusBoolean(false)]);
-
       case 'AboutToShowGroup':
         if (methodCall.signature != DBusSignature('ai')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
         return DBusMethodSuccessResponse([DBusArray.int32([])]);
-
       case 'Event':
         if (methodCall.signature != DBusSignature('isvu')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
         return DBusMethodSuccessResponse();
-
       case 'EventGroup':
         if (methodCall.signature != DBusSignature('a(isvu)')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
         return DBusMethodSuccessResponse([DBusArray.int32([])]);
-
+      case 'GetLayout':
+        if (methodCall.signature != DBusSignature('iias')) {
+          return DBusMethodErrorResponse.invalidArgs();
+        }
+        return DBusMethodSuccessResponse([
+          DBusUint32(0),
+          DBusStruct(
+              [DBusInt32(0), DBusDict.stringVariant({}), DBusArray.variant([])])
+        ]);
       case 'GetProperty':
         if (methodCall.signature != DBusSignature('is')) {
           return DBusMethodErrorResponse.invalidArgs();
         }
         return DBusMethodSuccessResponse([DBusVariant(DBusString(''))]);
-
       default:
         return DBusMethodErrorResponse.unknownMethod();
     }
