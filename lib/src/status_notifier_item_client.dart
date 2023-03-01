@@ -253,14 +253,11 @@ class StatusNotifierItemClient {
   final bool _closeBus;
 
   late final DBusMenuObject _menuObject;
-
-  /// Creates a new status notifier item client. If [bus] is provided connect to the given D-Bus server.
-  StatusNotifierItemClient({DBusClient? bus})
-      : _bus = bus ?? DBusClient.session(),
-        _closeBus = bus == null {}
+  late final _StatusNotifierItemObject _notifierItemObject;
 
   // FIXME: status enum
-  Future<void> addItem(
+  /// Creates a new status notifier item client. If [bus] is provided connect to the given D-Bus server.
+  StatusNotifierItemClient(
       {required String id,
       StatusNotifierItemCategory category =
           StatusNotifierItemCategory.applicationStatus,
@@ -271,17 +268,12 @@ class StatusNotifierItemClient {
       String overlayIconName = '',
       String attentionIconName = '',
       String attentionMovieName = '',
-      required DBusMenuItem menu}) async {
-    var name = 'org.kde.StatusNotifierItem-$pid-1';
-    var requestResult = await _bus.requestName(name);
-    assert(requestResult == DBusRequestNameReply.primaryOwner);
-
-    // Register the menu.
+      required DBusMenuItem menu,
+      DBusClient? bus})
+      : _bus = bus ?? DBusClient.session(),
+        _closeBus = bus == null {
     _menuObject = DBusMenuObject(DBusObjectPath('/Menu'), menu);
-    await _bus.registerObject(_menuObject);
-
-    // Put the item on the bus.
-    var item = _StatusNotifierItemObject(
+    _notifierItemObject = _StatusNotifierItemObject(
         id: id,
         category: category,
         title: title,
@@ -292,7 +284,19 @@ class StatusNotifierItemClient {
         attentionIconName: attentionIconName,
         attentionMovieName: attentionMovieName,
         menu: _menuObject.path);
-    await _bus.registerObject(item);
+  }
+
+  // Connect to D-Bus and register this notifier item.
+  Future<void> connect() async {
+    var name = 'org.kde.StatusNotifierItem-$pid-1';
+    var requestResult = await _bus.requestName(name);
+    assert(requestResult == DBusRequestNameReply.primaryOwner);
+
+    // Register the menu.
+    await _bus.registerObject(_menuObject);
+
+    // Put the item on the bus.
+    await _bus.registerObject(_notifierItemObject);
 
     // Register the item.
     await _bus.callMethod(

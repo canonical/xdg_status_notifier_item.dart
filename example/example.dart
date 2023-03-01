@@ -60,7 +60,7 @@ Future<void> setRadio(int active) async {
 }
 
 void main() async {
-  client = StatusNotifierItemClient();
-  await client.addItem(
+  client = StatusNotifierItemClient(
       id: 'dart-test', iconName: 'computer-fail-symbolic', menu: buildMenu());
+  await client.connect();
 }

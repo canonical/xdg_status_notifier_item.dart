@@ -6,9 +6,21 @@ Allows status notifications (i.e. system tray) on Linux desktops using the [Stat
 ```dart
 import 'package:xdg_status_notifier_item/xdg_status_notifier_item.dart';
 
-var client = StatusNotificationItemClient();
-...
-await client.close();
+late final StatusNotifierItemClient client;
+
+void main() async {
+  client = StatusNotifierItemClient(
+      id: 'test-client',
+      iconName: 'computer-fail-symbolic',
+      menu: DBusMenuItem(children: [
+        DBusMenuItem(label: 'Hello'),
+        DBusMenuItem(label: 'World', enabled: false),
+        DBusMenuItem.separator(),
+        DBusMenuItem(
+            label: 'Quit', onClicked: () async => await client.close()),
+      ]));
+  await client.connect();
+}
 ```
 
 ## Contributing to xdg_status_notifier_item.dart
