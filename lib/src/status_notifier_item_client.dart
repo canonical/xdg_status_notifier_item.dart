@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dbus/dbus.dart';
 
-import 'dbus_menu_client.dart';
+import 'dbus_menu_object.dart';
 
 /// Category for notifier items.
 enum StatusNotifierItemCategory {
