@@ -51,7 +51,8 @@ void main() {
       await watcher.close();
     });
 
-    var client = StatusNotifierItemClient(id: 'test', menu: DBusMenuItem());
+    var client = StatusNotifierItemClient(
+        id: 'test', menu: DBusMenuItem(), bus: DBusClient(clientAddress));
     addTearDown(() async {
       await client.close();
     });
