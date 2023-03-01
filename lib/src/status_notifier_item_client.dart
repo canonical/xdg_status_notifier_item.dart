@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dbus/dbus.dart';
 
+import 'dbus_menu_client.dart';
+
 /// Category for notifier items.
 enum StatusNotifierItemCategory {
   applicationStatus,
@@ -12,62 +14,6 @@ enum StatusNotifierItemCategory {
 
 /// Status for notifier items.
 enum StatusNotifierItemStatus { passive, active }
-
-class DBusMenuItem {
-  final String? type;
-  final bool? enabled;
-  final bool? visible;
-  final String? label;
-  final int? toggleState;
-  final String? toggleType;
-  final List<DBusMenuItem> children;
-  bool Function(int id)? aboutToShow;
-  Future<void> Function()? opened;
-  Future<void> Function()? closed;
-  Future<void> Function()? clicked;
-
-  DBusMenuItem(
-      {this.type,
-      this.enabled,
-      this.visible,
-      this.label,
-      this.toggleState,
-      this.toggleType,
-      this.children = const [],
-      this.aboutToShow,
-      this.opened,
-      this.closed,
-      this.clicked});
-
-  DBusMenuItem.separator({bool visible = true})
-      : this(type: 'separator', visible: visible);
-
-  DBusMenuItem.checkmark(String label,
-      {bool visible = true,
-      bool enabled = true,
-      bool state = false,
-      Future<void> Function()? clicked})
-      : this(
-            visible: visible,
-            enabled: enabled,
-            label: label,
-            toggleType: 'checkmark',
-            toggleState: state ? 1 : 0,
-            clicked: clicked);
-
-  DBusMenuItem.radio(String label,
-      {bool visible = true,
-      bool enabled = true,
-      bool state = false,
-      Future<void> Function()? clicked})
-      : this(
-            visible: visible,
-            enabled: enabled,
-            label: label,
-            toggleType: 'radio',
-            toggleState: state ? 1 : 0,
-            clicked: clicked);
-}
 
 String _encodeCategory(StatusNotifierItemCategory value) =>
     {
@@ -84,199 +30,6 @@ String _encodeStatus(StatusNotifierItemStatus value) =>
       StatusNotifierItemStatus.active: 'Active'
     }[value] ??
     '';
-
-class _MenuObject extends DBusObject {
-  DBusMenuItem menu;
-  var _items = <DBusMenuItem>[];
-  var _idsByItem = <DBusMenuItem, int>{};
-
-  _MenuObject(this.menu) : super(DBusObjectPath('/Menu')) {
-    _registerId(menu);
-  }
-
-  List<DBusIntrospectInterface> introspect() {
-    return [
-      DBusIntrospectInterface('com.canonical.dbusmenu', methods: [
-        DBusIntrospectMethod('AboutToShow', args: [
-          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
-              name: 'id'),
-          DBusIntrospectArgument(DBusSignature('b'), DBusArgumentDirection.out,
-              name: 'needsUpdate')
-        ]),
-        DBusIntrospectMethod('AboutToShowGroup', args: [
-          DBusIntrospectArgument(DBusSignature('ai'), DBusArgumentDirection.in_,
-              name: 'ids'),
-          DBusIntrospectArgument(DBusSignature('ai'), DBusArgumentDirection.out,
-              name: 'updatesNeeded'),
-          DBusIntrospectArgument(DBusSignature('ai'), DBusArgumentDirection.out,
-              name: 'idErrors')
-        ]),
-        DBusIntrospectMethod('Event', args: [
-          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
-              name: 'id'),
-          DBusIntrospectArgument(DBusSignature('s'), DBusArgumentDirection.in_,
-              name: 'eventId'),
-          DBusIntrospectArgument(DBusSignature('v'), DBusArgumentDirection.in_,
-              name: 'data'),
-          DBusIntrospectArgument(DBusSignature('u'), DBusArgumentDirection.in_,
-              name: 'timestamp')
-        ]),
-        DBusIntrospectMethod('EventGroup', args: [
-          DBusIntrospectArgument(
-              DBusSignature('a(isvu)'), DBusArgumentDirection.in_,
-              name: 'events'),
-          DBusIntrospectArgument(DBusSignature('ai'), DBusArgumentDirection.out,
-              name: 'idErrors')
-        ]),
-        DBusIntrospectMethod('GetLayout', args: [
-          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
-              name: 'parentId'),
-          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
-              name: 'recursionDepth'),
-          DBusIntrospectArgument(DBusSignature('as'), DBusArgumentDirection.in_,
-              name: 'propertyNames'),
-          DBusIntrospectArgument(DBusSignature('u'), DBusArgumentDirection.out,
-              name: 'revision'),
-          DBusIntrospectArgument(
-              DBusSignature('(ia{sv}av)'), DBusArgumentDirection.out,
-              name: 'layout')
-        ]),
-        DBusIntrospectMethod('GetProperty', args: [
-          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.in_,
-              name: 'id'),
-          DBusIntrospectArgument(DBusSignature('s'), DBusArgumentDirection.in_,
-              name: 'name'),
-          DBusIntrospectArgument(DBusSignature('v'), DBusArgumentDirection.out,
-              name: 'value')
-        ])
-      ], signals: [], properties: [
-        DBusIntrospectProperty('IconThemePath', DBusSignature('as'),
-            access: DBusPropertyAccess.read),
-        DBusIntrospectProperty('Status', DBusSignature('s'),
-            access: DBusPropertyAccess.read),
-        DBusIntrospectProperty('TextDirection', DBusSignature('s'),
-            access: DBusPropertyAccess.read),
-        DBusIntrospectProperty('Version', DBusSignature('u'),
-            access: DBusPropertyAccess.read)
-      ])
-    ];
-  }
-
-  @override
-  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
-    if (methodCall.interface != 'com.canonical.dbusmenu') {
-      return DBusMethodErrorResponse.unknownInterface();
-    }
-
-    switch (methodCall.name) {
-      case 'AboutToShow':
-        if (methodCall.signature != DBusSignature('i')) {
-          return DBusMethodErrorResponse.invalidArgs();
-        }
-        var id = methodCall.values[0].asInt32();
-        var item = _getItem(id);
-        if (item != null) {
-          var needsUpdate = await item.aboutToShow?.call(id) ?? false;
-          return DBusMethodSuccessResponse([DBusBoolean(needsUpdate)]);
-        } else {
-          return DBusMethodErrorResponse('com.canonical.dbusmenu.UnknownId');
-        }
-      case 'AboutToShowGroup':
-        if (methodCall.signature != DBusSignature('ai')) {
-          return DBusMethodErrorResponse.invalidArgs();
-        }
-        var ids = methodCall.values[0].asInt32Array();
-        return DBusMethodSuccessResponse(
-            [DBusArray.int32([]), DBusArray.int32([])]);
-      case 'Event':
-        if (methodCall.signature != DBusSignature('isvu')) {
-          return DBusMethodErrorResponse.invalidArgs();
-        }
-        var id = methodCall.values[0].asInt32();
-        var eventId = methodCall.values[1].asString();
-        //var data = methodCall.values[2].asVariant();
-        //var timestamp = methodCall.values[3].asUint32();
-        var item = _getItem(id);
-        if (item != null) {
-          switch (eventId) {
-            case 'opened':
-              await item.opened?.call();
-              break;
-            case 'closed':
-              await item.closed?.call();
-              break;
-            case 'clicked':
-              await item.clicked?.call();
-              break;
-          }
-        }
-        return DBusMethodSuccessResponse();
-      case 'EventGroup':
-        if (methodCall.signature != DBusSignature('a(isvu)')) {
-          return DBusMethodErrorResponse.invalidArgs();
-        }
-        return DBusMethodSuccessResponse([DBusArray.int32([])]);
-      case 'GetLayout':
-        if (methodCall.signature != DBusSignature('iias')) {
-          return DBusMethodErrorResponse.invalidArgs();
-        }
-        var parentId = methodCall.values[0].asInt32();
-        var recursionDepth = methodCall.values[1].asInt32();
-        var propertyNames = methodCall.values[2].asStringArray();
-        var revision = 1;
-        return DBusMethodSuccessResponse(
-            [DBusUint32(revision), _makeMenuItem(menu)]);
-      case 'GetProperty':
-        if (methodCall.signature != DBusSignature('is')) {
-          return DBusMethodErrorResponse.invalidArgs();
-        }
-        return DBusMethodSuccessResponse([DBusVariant(DBusString(''))]);
-      default:
-        return DBusMethodErrorResponse.unknownMethod();
-    }
-  }
-
-  void _registerId(DBusMenuItem item) {
-    var id = _items.length;
-    _items.add(item);
-    _idsByItem[item] = id;
-    item.children.forEach(_registerId);
-  }
-
-  DBusValue _makeMenuItem(DBusMenuItem item) {
-    var properties = <String, DBusValue>{};
-    if (item.type != null) {
-      properties['type'] = DBusString(item.type!);
-    }
-    if (item.enabled != null) {
-      properties['enabled'] = DBusBoolean(item.enabled!);
-    }
-    if (item.visible != null) {
-      properties['visible'] = DBusBoolean(item.visible!);
-    }
-    if (item.label != null) {
-      properties['label'] = DBusString(item.label!);
-    }
-    if (item.toggleType != null) {
-      properties['toggle-type'] = DBusString(item.toggleType!);
-    }
-    if (item.toggleState != null) {
-      properties['toggle-state'] = DBusInt32(item.toggleState!);
-    }
-    if (item.children.isNotEmpty) {
-      properties['children-display'] = DBusString('submenu');
-    }
-    return DBusStruct([
-      DBusInt32(_idsByItem[item] ?? -1),
-      DBusDict.stringVariant(properties),
-      DBusArray.variant(item.children.map(_makeMenuItem))
-    ]);
-  }
-
-  DBusMenuItem? _getItem(int id) {
-    return id >= 0 && id <= _items.length ? _items[id] : null;
-  }
-}
 
 class _StatusNotifierItemObject extends DBusObject {
   final StatusNotifierItemCategory category;
@@ -536,7 +289,7 @@ class StatusNotifierItemClient {
       ]),
       DBusMenuItem(label: 'Quit')
     ]);
-    var menuObject = _MenuObject(menu);
+    var menuObject = DBusMenuObject(DBusObjectPath('/Menu'), menu);
     await _bus.registerObject(menuObject);
 
     // Put the item on the bus.
