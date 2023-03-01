@@ -12,16 +12,16 @@ class DBusMenuItem {
   final List<DBusMenuItem> children;
 
   // Called when this menu item is about to be shown. Return true if this item needs updating.
-  final bool Function()? aboutToShow;
+  final bool Function()? onAboutToShow;
 
   /// Called when the submenu under this item is opened.
-  final Future<void> Function()? opened;
+  final Future<void> Function()? onOpened;
 
   /// Called when the submenu under this item is closed.
-  final Future<void> Function()? closed;
+  final Future<void> Function()? onClosed;
 
   /// Called when this item is clicked.
-  final Future<void> Function()? clicked;
+  final Future<void> Function()? onClicked;
 
   /// Creates a new menu item.
   DBusMenuItem(
@@ -32,10 +32,10 @@ class DBusMenuItem {
       this.toggleState,
       this.toggleType,
       this.children = const [],
-      this.aboutToShow,
-      this.opened,
-      this.closed,
-      this.clicked});
+      this.onAboutToShow,
+      this.onOpened,
+      this.onClosed,
+      this.onClicked});
 
   /// Creates a new separator menu item.
   DBusMenuItem.separator({bool visible = true})
@@ -46,28 +46,28 @@ class DBusMenuItem {
       {bool visible = true,
       bool enabled = true,
       bool state = false,
-      Future<void> Function()? clicked})
+      Future<void> Function()? onClicked})
       : this(
             visible: visible,
             enabled: enabled,
             label: label,
             toggleType: 'checkmark',
             toggleState: state ? 1 : 0,
-            clicked: clicked);
+            onClicked: onClicked);
 
   // Creates a new radio menu item. If [state] is true the item is active.
   DBusMenuItem.radio(String label,
       {bool visible = true,
       bool enabled = true,
       bool state = false,
-      Future<void> Function()? clicked})
+      Future<void> Function()? onClicked})
       : this(
             visible: visible,
             enabled: enabled,
             label: label,
             toggleType: 'radio',
             toggleState: state ? 1 : 0,
-            clicked: clicked);
+            onClicked: onClicked);
 }
 
 class DBusMenuObject extends DBusObject {
@@ -136,7 +136,28 @@ class DBusMenuObject extends DBusObject {
           DBusIntrospectArgument(DBusSignature('v'), DBusArgumentDirection.out,
               name: 'value')
         ])
-      ], signals: [], properties: [
+      ], signals: [
+        DBusIntrospectSignal('ItemsPropertiesUpdated', args: [
+          DBusIntrospectArgument(
+              DBusSignature('a(ia{sv})'), DBusArgumentDirection.out,
+              name: 'updatedProps'),
+          DBusIntrospectArgument(
+              DBusSignature('a(ias)'), DBusArgumentDirection.out,
+              name: 'removedProps')
+        ]),
+        DBusIntrospectSignal('LayoutUpdated', args: [
+          DBusIntrospectArgument(DBusSignature('u'), DBusArgumentDirection.out,
+              name: 'revision'),
+          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.out,
+              name: 'parent')
+        ]),
+        DBusIntrospectSignal('ItemActivationRequested', args: [
+          DBusIntrospectArgument(DBusSignature('i'), DBusArgumentDirection.out,
+              name: 'id'),
+          DBusIntrospectArgument(DBusSignature('u'), DBusArgumentDirection.out,
+              name: 'timestamp')
+        ]),
+      ], properties: [
         DBusIntrospectProperty('IconThemePath', DBusSignature('as'),
             access: DBusPropertyAccess.read),
         DBusIntrospectProperty('Status', DBusSignature('s'),
@@ -165,7 +186,7 @@ class DBusMenuObject extends DBusObject {
         if (item == null) {
           return DBusMethodErrorResponse('com.canonical.dbusmenu.UnknownId');
         }
-        var needsUpdate = await item.aboutToShow?.call() ?? false;
+        var needsUpdate = await item.onAboutToShow?.call() ?? false;
         return DBusMethodSuccessResponse([DBusBoolean(needsUpdate)]);
       case 'AboutToShowGroup':
         if (methodCall.signature != DBusSignature('ai')) {
@@ -179,7 +200,7 @@ class DBusMenuObject extends DBusObject {
           if (item == null) {
             idErrors.add(id);
           } else {
-            var needsUpdate = await item.aboutToShow?.call() ?? false;
+            var needsUpdate = await item.onAboutToShow?.call() ?? false;
             if (needsUpdate) updatesNeeded.add(id);
           }
         }
@@ -313,13 +334,13 @@ class DBusMenuObject extends DBusObject {
       DBusMenuItem item, String eventId, DBusValue data, int timestamp) async {
     switch (eventId) {
       case 'opened':
-        await item.opened?.call();
+        await item.onOpened?.call();
         break;
       case 'closed':
-        await item.closed?.call();
+        await item.onClosed?.call();
         break;
       case 'clicked':
-        await item.clicked?.call();
+        await item.onClicked?.call();
         break;
     }
   }

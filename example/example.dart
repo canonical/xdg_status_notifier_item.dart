@@ -4,25 +4,31 @@ void main() async {
   var client = StatusNotifierItemClient();
   await client.addItem(
       id: 'dart-test',
-      title: 'Test',
+      iconName: 'computer-fail-symbolic',
       menu: DBusMenuItem(children: [
-        DBusMenuItem(label: 'Start', enabled: false),
-        DBusMenuItem(label: 'Open Shell'),
-        DBusMenuItem(label: 'Stop', enabled: false),
+        DBusMenuItem(
+            label: 'Item', onClicked: () async => print('Item clicked!')),
+        DBusMenuItem(label: 'Disabled Item', enabled: false),
+        DBusMenuItem(label: 'Invisible Item', visible: false),
         DBusMenuItem.separator(),
-        DBusMenuItem(label: 'snapcraft-ubuntu-desktop-session', children: [
-          DBusMenuItem(label: 'Start'),
-          DBusMenuItem(label: 'Open Shell'),
-          DBusMenuItem(label: 'Stop', enabled: false)
-        ]),
-        DBusMenuItem(label: 'About', children: [
-          DBusMenuItem.checkmark('Autostart on login', state: true),
-          DBusMenuItem(label: 'multipass version: 1.11.0', enabled: false),
-          DBusMenuItem(label: 'multipassd version: 1.11.0', enabled: false),
+        DBusMenuItem(label: 'Submenu', children: [
           DBusMenuItem(
-              label: 'Copyright © 2017-2022 Canonical Ltd.', enabled: false)
+              label: 'Submenu 1',
+              onClicked: () async => print('Submenu item 1 clicked!')),
+          DBusMenuItem(
+              label: 'Submenu 2',
+              onClicked: () async => print('Submenu item 2 clicked!')),
+          DBusMenuItem(
+              label: 'Submenu 3',
+              onClicked: () async => print('Submenu item 3 clicked!'))
         ]),
-        DBusMenuItem(label: 'Quit')
+        DBusMenuItem.separator(),
+        DBusMenuItem.checkmark('Checkmark On', state: true),
+        DBusMenuItem.checkmark('Checkmark Off'),
+        DBusMenuItem.separator(),
+        DBusMenuItem.checkmark('Radio 1', state: true),
+        DBusMenuItem.checkmark('Radio 2'),
+        DBusMenuItem.checkmark('Radio 3'),
       ]));
   //await client.close();
 }
