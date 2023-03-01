@@ -41,12 +41,11 @@ class _StatusNotifierItemObject extends DBusObject {
   String overlayIconName;
   String attentionIconName;
   String attentionMovieName;
-  final bool itemIsMenu;
   final DBusObjectPath menu;
-  Future<void> Function(int x, int y)? contextMenu;
-  Future<void> Function(int x, int y)? activate;
-  Future<void> Function(int x, int y)? secondaryActivate;
-  Future<void> Function(int delta, String orientation)? scroll;
+  Future<void> Function(int x, int y)? onContextMenu;
+  Future<void> Function(int x, int y)? onActivate;
+  Future<void> Function(int x, int y)? onSecondaryActivate;
+  Future<void> Function(int delta, String orientation)? onScroll;
 
   _StatusNotifierItemObject(
       {this.category = StatusNotifierItemCategory.applicationStatus,
@@ -58,14 +57,14 @@ class _StatusNotifierItemObject extends DBusObject {
       this.overlayIconName = '',
       this.attentionIconName = '',
       this.attentionMovieName = '',
-      this.itemIsMenu = false,
       this.menu = DBusObjectPath.root,
-      this.contextMenu,
-      this.activate,
-      this.secondaryActivate,
-      this.scroll})
+      this.onContextMenu,
+      this.onActivate,
+      this.onSecondaryActivate,
+      this.onScroll})
       : super(DBusObjectPath('/StatusNotifierItem'));
 
+  @override
   List<DBusIntrospectInterface> introspect() {
     return [
       DBusIntrospectInterface('org.freedesktop.StatusNotifierItem', methods: [
@@ -145,7 +144,7 @@ class _StatusNotifierItemObject extends DBusObject {
         }
         var x = methodCall.values[0].asInt32();
         var y = methodCall.values[0].asInt32();
-        await contextMenu?.call(x, y);
+        await onContextMenu?.call(x, y);
         return DBusMethodSuccessResponse();
       case 'Activate':
         if (methodCall.signature != DBusSignature('ii')) {
@@ -153,7 +152,7 @@ class _StatusNotifierItemObject extends DBusObject {
         }
         var x = methodCall.values[0].asInt32();
         var y = methodCall.values[0].asInt32();
-        await activate?.call(x, y);
+        await onActivate?.call(x, y);
         return DBusMethodSuccessResponse();
       case 'SecondaryActivate':
         if (methodCall.signature != DBusSignature('ii')) {
@@ -161,7 +160,7 @@ class _StatusNotifierItemObject extends DBusObject {
         }
         var x = methodCall.values[0].asInt32();
         var y = methodCall.values[0].asInt32();
-        await secondaryActivate?.call(x, y);
+        await onSecondaryActivate?.call(x, y);
         return DBusMethodSuccessResponse();
       case 'Scroll':
         if (methodCall.signature != DBusSignature('is')) {
@@ -169,7 +168,7 @@ class _StatusNotifierItemObject extends DBusObject {
         }
         var delta = methodCall.values[0].asInt32();
         var orientation = methodCall.values[0].asString();
-        await scroll?.call(delta, orientation);
+        await onScroll?.call(delta, orientation);
         return DBusMethodSuccessResponse();
       case 'ProvideXdgActivationToken':
         if (methodCall.signature != DBusSignature('s')) {
@@ -220,7 +219,7 @@ class _StatusNotifierItemObject extends DBusObject {
           DBusString('')
         ]));
       case 'ItemIsMenu':
-        return DBusGetPropertyResponse(DBusBoolean(itemIsMenu));
+        return DBusGetPropertyResponse(DBusBoolean(false));
       case 'Menu':
         return DBusGetPropertyResponse(menu);
       default:
@@ -240,7 +239,7 @@ class _StatusNotifierItemObject extends DBusObject {
       'OverlayIconName': DBusString(overlayIconName),
       'AttentionIconName': DBusString(attentionIconName),
       'AttentionMovieName': DBusString(attentionMovieName),
-      'ItemIsMenu': DBusBoolean(itemIsMenu),
+      'ItemIsMenu': DBusBoolean(false),
       'Menu': menu
     });
   }
@@ -269,6 +268,10 @@ class StatusNotifierItemClient {
       String attentionIconName = '',
       String attentionMovieName = '',
       required DBusMenuItem menu,
+      Future<void> Function(int x, int y)? onContextMenu,
+      Future<void> Function(int x, int y)? onActivate,
+      Future<void> Function(int x, int y)? onSecondaryActivate,
+      Future<void> Function(int delta, String orientation)? onScroll,
       DBusClient? bus})
       : _bus = bus ?? DBusClient.session(),
         _closeBus = bus == null {
@@ -283,7 +286,11 @@ class StatusNotifierItemClient {
         overlayIconName: overlayIconName,
         attentionIconName: attentionIconName,
         attentionMovieName: attentionMovieName,
-        menu: _menuObject.path);
+        menu: _menuObject.path,
+        onContextMenu: onContextMenu,
+        onActivate: onActivate,
+        onSecondaryActivate: onSecondaryActivate,
+        onScroll: onScroll);
   }
 
   // Connect to D-Bus and register this notifier item.

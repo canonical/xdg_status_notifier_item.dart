@@ -12,7 +12,7 @@ class DBusMenuItem {
   final List<DBusMenuItem> children;
 
   // Called when this menu item is about to be shown. Return true if this item needs updating.
-  final bool Function()? onAboutToShow;
+  final Future<bool> Function()? onAboutToShow;
 
   /// Called when the submenu under this item is opened.
   final Future<void> Function()? onOpened;
@@ -74,8 +74,8 @@ class DBusMenuObject extends DBusObject {
   // The menu being exported over DBus.
   DBusMenuItem menu;
 
-  var _items = <DBusMenuItem>[];
-  var _idsByItem = <DBusMenuItem, int>{};
+  final _items = <DBusMenuItem>[];
+  final _idsByItem = <DBusMenuItem, int>{};
 
   DBusMenuObject(DBusObjectPath path, this.menu) : super(path) {
     _registerIds(menu);
@@ -129,6 +129,7 @@ class DBusMenuObject extends DBusObject {
     }
   }
 
+  @override
   List<DBusIntrospectInterface> introspect() {
     return [
       DBusIntrospectInterface('com.canonical.dbusmenu', methods: [
@@ -294,10 +295,14 @@ class DBusMenuObject extends DBusObject {
         }
         var parentId = methodCall.values[0].asInt32();
         var recursionDepth = methodCall.values[1].asInt32();
-        var propertyNames = methodCall.values[2].asStringArray();
+        //var propertyNames = methodCall.values[2].asStringArray();
+        var item = _getItem(parentId);
+        if (item == null) {
+          return DBusMethodErrorResponse('com.canonical.dbusmenu.UnknownId');
+        }
         var revision = 1;
         return DBusMethodSuccessResponse(
-            [DBusUint32(revision), _makeMenuItem(menu, recursionDepth)]);
+            [DBusUint32(revision), _makeMenuItem(item, recursionDepth)]);
       case 'GetProperty':
         if (methodCall.signature != DBusSignature('is')) {
           return DBusMethodErrorResponse.invalidArgs();
