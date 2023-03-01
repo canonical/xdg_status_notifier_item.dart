@@ -268,27 +268,13 @@ class StatusNotifierItemClient {
       String iconName = '',
       String overlayIconName = '',
       String attentionIconName = '',
-      String attentionMovieName = ''}) async {
+      String attentionMovieName = '',
+      required DBusMenuItem menu}) async {
     var name = 'org.kde.StatusNotifierItem-$pid-1';
     var requestResult = await _bus.requestName(name);
     assert(requestResult == DBusRequestNameReply.primaryOwner);
 
-    // Create a menu.
-    var menu = DBusMenuItem(children: [
-      DBusMenuItem(label: 'Start', enabled: false),
-      DBusMenuItem(label: 'Open Shell'),
-      DBusMenuItem(label: 'Stop', enabled: false),
-      DBusMenuItem.separator(),
-      DBusMenuItem(label: 'snapcraft-ubuntu-desktop-session', children: [
-        DBusMenuItem(label: 'Start'),
-        DBusMenuItem(label: 'Open Shell'),
-        DBusMenuItem(label: 'Stop', enabled: false)
-      ]),
-      DBusMenuItem(label: 'About', children: [
-        DBusMenuItem.checkmark('Autostart on login', state: true)
-      ]),
-      DBusMenuItem(label: 'Quit')
-    ]);
+    // Register the menu.
     var menuObject = DBusMenuObject(DBusObjectPath('/Menu'), menu);
     await _bus.registerObject(menuObject);
 
