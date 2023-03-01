@@ -29,6 +29,7 @@ void main() async {
         DBusMenuItem.checkmark('Radio 1', state: true),
         DBusMenuItem.checkmark('Radio 2'),
         DBusMenuItem.checkmark('Radio 3'),
+        DBusMenuItem(
+            label: 'Quit', onClicked: () async => await client.close()),
       ]));
-  //await client.close();
 }
