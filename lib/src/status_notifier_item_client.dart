@@ -252,6 +252,8 @@ class StatusNotifierItemClient {
   final DBusClient _bus;
   final bool _closeBus;
 
+  late final DBusMenuObject _menuObject;
+
   /// Creates a new status notifier item client. If [bus] is provided connect to the given D-Bus server.
   StatusNotifierItemClient({DBusClient? bus})
       : _bus = bus ?? DBusClient.session(),
@@ -275,8 +277,8 @@ class StatusNotifierItemClient {
     assert(requestResult == DBusRequestNameReply.primaryOwner);
 
     // Register the menu.
-    var menuObject = DBusMenuObject(DBusObjectPath('/Menu'), menu);
-    await _bus.registerObject(menuObject);
+    _menuObject = DBusMenuObject(DBusObjectPath('/Menu'), menu);
+    await _bus.registerObject(_menuObject);
 
     // Put the item on the bus.
     var item = _StatusNotifierItemObject(
@@ -289,7 +291,7 @@ class StatusNotifierItemClient {
         overlayIconName: overlayIconName,
         attentionIconName: attentionIconName,
         attentionMovieName: attentionMovieName,
-        menu: menuObject.path);
+        menu: _menuObject.path);
     await _bus.registerObject(item);
 
     // Register the item.
@@ -300,6 +302,11 @@ class StatusNotifierItemClient {
         name: 'RegisterStatusNotifierItem',
         values: [DBusString(name)],
         replySignature: DBusSignature.empty);
+  }
+
+  /// Updates the menu shown.
+  Future<void> updateMenu(DBusMenuItem menu) async {
+    await _menuObject.update(menu);
   }
 
   /// Terminates all active connections. If a client remains unclosed, the Dart process may not terminate.

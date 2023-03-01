@@ -78,7 +78,55 @@ class DBusMenuObject extends DBusObject {
   var _idsByItem = <DBusMenuItem, int>{};
 
   DBusMenuObject(DBusObjectPath path, this.menu) : super(path) {
-    _registerId(menu);
+    _registerIds(menu);
+  }
+
+  /// Export an updated [menu]. This must have the same number and layout of items as the previous menu.
+  Future<void> update(DBusMenuItem menu) async {
+    // Calculate what has changed.
+    var updatedProperties = <DBusValue>[];
+    var removedProperties = <DBusValue>[];
+    _makeMenuItemPropertiesUpdated(
+        this.menu, menu, updatedProperties, removedProperties);
+
+    // Replace old menu.
+    _items.clear();
+    _idsByItem.clear();
+    this.menu = menu;
+    _registerIds(menu);
+
+    await emitSignal('com.canonical.dbusmenu', 'ItemsPropertiesUpdated', [
+      DBusArray(DBusSignature('(ia{sv})'), updatedProperties),
+      DBusArray(DBusSignature('(ias)'), removedProperties)
+    ]);
+  }
+
+  void _makeMenuItemPropertiesUpdated(
+      DBusMenuItem originalItem,
+      DBusMenuItem newItem,
+      List<DBusValue> allUpdatedProperties,
+      List<DBusValue> allRemovedProperties) {
+    var id = _idsByItem[originalItem]!;
+    var originalProperties = _makeMenuItemProperties(originalItem);
+    var newProperties = _makeMenuItemProperties(newItem);
+    var updatedProperties =
+        _getUpdatedProperties(originalProperties, newProperties);
+    if (updatedProperties.isNotEmpty) {
+      allUpdatedProperties.add(DBusStruct(
+          [DBusInt32(id), DBusDict.stringVariant(updatedProperties)]));
+    }
+    var removedProperties =
+        _getRemovedProperties(originalProperties, newProperties);
+    if (removedProperties.isNotEmpty) {
+      allRemovedProperties.add(
+          DBusStruct([DBusInt32(id), DBusArray.string(removedProperties)]));
+    }
+
+    assert(originalItem.children.length == newItem.children.length);
+    for (var i = 0; i < originalItem.children.length; i++) {
+      _makeMenuItemPropertiesUpdated(originalItem.children[i],
+          newItem.children[i], allUpdatedProperties, allRemovedProperties);
+    }
   }
 
   List<DBusIntrospectInterface> introspect() {
@@ -273,11 +321,11 @@ class DBusMenuObject extends DBusObject {
   }
 
   // Register a new [item] and assign it an id.
-  void _registerId(DBusMenuItem item) {
+  void _registerIds(DBusMenuItem item) {
     var id = _items.length;
     _items.add(item);
     _idsByItem[item] = id;
-    item.children.forEach(_registerId);
+    item.children.forEach(_registerIds);
   }
 
   // Build properties on menu items.
@@ -305,6 +353,24 @@ class DBusMenuObject extends DBusObject {
       properties['children-display'] = DBusString('submenu');
     }
     return properties;
+  }
+
+  // Returns properties in [newProperties] that are new or have changed values from [originalProperties].
+  static Map<String, DBusValue> _getUpdatedProperties(
+      Map<String, DBusValue> originalProperties,
+      Map<String, DBusValue> newProperties) {
+    return Map.fromEntries(newProperties.entries.where((entry) =>
+        !originalProperties.containsKey(entry.key) ||
+        originalProperties[entry.key] != entry.value));
+  }
+
+  // Returns names of properties that are in [originalProperties] but not in [newProperties].
+  static List<String> _getRemovedProperties(
+      Map<String, DBusValue> originalProperties,
+      Map<String, DBusValue> newProperties) {
+    return originalProperties.keys
+        .where((name) => !newProperties.containsKey(name))
+        .toList();
   }
 
   // Build description of menu items.
