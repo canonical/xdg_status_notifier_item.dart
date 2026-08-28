@@ -3,6 +3,28 @@
 
 Allows status notifications (i.e. system tray) on Linux desktops using the [StatusNotifierItem specification](https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/).
 
+## Install
+
+```shell
+dart pub add xdg_status_notifier_item
+```
+
+```shell
+flutter pub add xdg_status_notifier_item
+```
+
+Or
+
+### pubspec.yam
+```pubspec.yaml
+dependencies:
+  xdg_status_notifier_item: ^0.0.1
+```
+
+Pub.dev page: [https://pub.dev/packages/xdg_status_notifier_item ](https://pub.dev/packages/xdg_status_notifier_item)
+
+## Usage
+
 ```dart
 import 'package:xdg_status_notifier_item/xdg_status_notifier_item.dart';
 
